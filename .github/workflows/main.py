@@ -1,0 +1,63 @@
+name: Telegram Bot Worker
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Run duration (hours)'
+        required: false
+        default: '6'
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(github.event.inputs.duration || '6') * 60 }}
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: 🔧 Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl nmap
+    
+    - name: 📦 Install Python Requirements
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: 🤖 Run Bot
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+        STORAGE_CHAT_ID: ${{ secrets.STORAGE_CHAT_ID }}
+      run: |
+        echo "🚀 Starting Telegram Bot..."
+        echo "⏱️ Duration: ${{ github.event.inputs.duration || '6' }} hours"
+        python bot.py
+    
+    - name: 📤 Upload Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: scan-results-${{ github.run_number }}
+        path: |
+          *.txt
+          file_storage.json
+        retention-days: 7
+    
+    - name: 📊 Job Summary
+      if: always()
+      run: |
+        echo "### 🤖 Bot Execution Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Status:** Completed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Run ID:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
